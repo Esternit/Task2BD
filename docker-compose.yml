@@ -1,14 +1,16 @@
 version: "3.8"
 
 services:
-  # script:
-  #   build: ./script/
-  #   command: /script/src/script.py
-  #   container_name: script-mtg
-  #   depends_on:
-  #     - db
-  #   networks:
-  #     - net
+  script:
+    image: esternit/task2bd:latest
+    # build: ./script/
+    ports:
+      - "8000:8000"
+    container_name: script-mtg
+    depends_on:
+      - db
+    networks:
+      - net
   db:
     image: postgres:latest
     environment:
@@ -18,8 +20,8 @@ services:
     container_name: dbpg-mtg
     volumes:
       - ./database/postgres/data:/var/lib/postgresql/data
-      - ./students.csv:/docker-entrypoint-initdb.d/students.csv # Добавляем CSV-файл для загрузки данных
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql # Добавляем SQL-скрипт для инициализации
+      - ./students.csv:/docker-entrypoint-initdb.d/students.csv
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: always
     ports:
       - "5432:5432"
@@ -34,7 +36,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin
       PGADMIN_CONFIG_SERVER_MODE: "False"
     volumes:
-      - ./pgadmin-data:/var/lib/pgadmin # Добавляем volume для pgAdmin
+      - ./pgadmin-data:/var/lib/pgadmin
     ports:
       - "5050:80"
     depends_on:
