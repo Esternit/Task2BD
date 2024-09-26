@@ -1,0 +1,42 @@
+version: "3.8"
+
+services:
+  # script:
+  #   build: ./script/
+  #   command: /script/src/script.py
+  #   container_name: script-mtg
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - net
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: db
+    container_name: dbpg-mtg
+    volumes:
+      - ./ .database/postgres/data:/var/lib/postgresql/data
+    restart: always
+    ports:
+      - "5432:5432"
+    networks:
+      - net
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - net
+    restart: unless-stopped
+
+networks:
+  net:
+    driver: bridge
