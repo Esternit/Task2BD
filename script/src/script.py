@@ -1,13 +1,7 @@
 import psycopg2
 import logging
 
-logging.basicConfig(level=logging.INFO, filename="script/logs/py_log.log",filemode="w",
-                    format="%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
-console.setFormatter(formatter)
-logging.getLogger('').addHandler(console)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 def connect():
 	try:
 		conn = psycopg2.connect(
@@ -15,7 +9,7 @@ def connect():
 			user = "user",
 			password ="pass",
 			port = "5432",
-			host = "localhost"
+			host = "dbpg-mtg"
 		)
 		logging.info("Connection with DB established successfully")
 		cur = conn.cursor()
@@ -23,35 +17,6 @@ def connect():
 	except:
 		logging.error("Error while connecting to DB")
 
-# Функция для создания таблиц students и disciplines
-def create_tables(cur, conn):
-    if cur is not None and conn is not None:
-        try:
-            # Создание таблицы students
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS students (
-                    id SERIAL PRIMARY KEY, 
-                    name VARCHAR(100) NOT NULL, 
-                    course_number INT CHECK (course_number > 0 AND course_number <= 6)
-                );
-            """)
-            
-            # Создание таблицы disciplines
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS disciplines (
-                    id SERIAL PRIMARY KEY, 
-                    discipline_name VARCHAR(100) NOT NULL, 
-                    day_of_week VARCHAR(20) CHECK (day_of_week IN ('Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота')), 
-                    lesson_number INT CHECK (lesson_number > 0 AND lesson_number <= 6), 
-                    course_number INT CHECK (course_number > 0 AND course_number <= 6)
-                );
-            """)
-
-            conn.commit()
-            logging.info("Tables created successfully")
-        except Exception as e:
-            logging.error("Error while creating tables: %s", e)
-            
 # API функции
 def get_student(student_id, cur):
     cur.execute("SELECT * FROM students WHERE id = %s", (student_id,))
@@ -90,37 +55,90 @@ def get_all_disciplines(cur):
     return disciplines
 
 def add_student(name, course_number, cur, conn):
-    cur.execute("INSERT INTO students (name, course_number) VALUES (%s, %s) RETURNING *", (name, course_number))
-    student = cur.fetchone()
-    conn.commit()
-    logging.info(f"Added student: {student}")
-    return student
+    try:
+        cur.execute("""INSERT INTO students (name, course_number) VALUES (%s, %s) 
+        ON CONFLICT (name)
+        DO UPDATE SET course_number = EXCLUDED.course_number
+        RETURNING *;
+        """, (name, course_number))
+        student = cur.fetchone()
+        conn.commit()  
+        logging.info(f"Added student: {student}")
+        return student
+    except Exception as e:
+
+        logging.error(f"Error adding student: {e}")
+        
+
+        conn.rollback()
+
+        try:
+
+            # Так как мы загружаем информацию из CSV-файла, где указаны id, то надо ресетнуть его здесь
+            cur.execute("SELECT MAX(id) FROM students")
+            max_id = cur.fetchone()[0]
+            if max_id is None:
+                max_id = 0  
+            cur.execute("SELECT setval(pg_get_serial_sequence('students', 'id'), %s)", (max_id,))
+            conn.commit()  
+            
+            logging.info(f"Sequence updated to {max_id}")
+
+            cur.execute("""INSERT INTO students (name, course_number) VALUES (%s, %s) 
+            ON CONFLICT (name)
+            DO UPDATE SET course_number = EXCLUDED.course_number
+            RETURNING *;
+            """, (name, course_number))
+            student = cur.fetchone()
+            conn.commit() 
+            logging.info(f"Added student after sequence update: {student}")
+            return student
+        except Exception as seq_e:
+            conn.rollback()
+            logging.error(f"Failed to update sequence or add student: {seq_e}")
+            return None
+
+
 def add_discipline(discipline_name, day_of_week, lesson_number, course_number, cur, conn):
-    cur.execute("""
-        INSERT INTO disciplines (discipline_name, day_of_week, lesson_number, course_number)
-        VALUES (%s, %s, %s, %s)
-    """, (discipline_name, day_of_week, lesson_number, course_number))
-    conn.commit()
-    logging.info(f"Added discipline: {discipline_name}, Day: {day_of_week}, Lesson: {lesson_number}, Course: {course_number}")
+    try:
+        cur.execute("""
+            INSERT INTO disciplines (discipline_name, day_of_week, lesson_number, course_number)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (discipline_name)
+            DO UPDATE SET day_of_week = EXCLUDED.day_of_week, lesson_number = EXCLUDED.lesson_number, course_number = EXCLUDED.course_number
+            RETURNING *;
+        """, (discipline_name, day_of_week, lesson_number, course_number))
+        discipline = cur.fetchone()
+        conn.commit()
+        logging.info(f"Added discipline: {discipline_name}, Day: {day_of_week}, Lesson: {lesson_number}, Course: {course_number}")
+        return discipline
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error adding discipline: {e}")
+        return None
 
 def delete_student(student_id, cur, conn):
-    cur.execute("DELETE FROM students WHERE id = %s", (student_id,))
+    cur.execute("DELETE FROM students WHERE id = %s RETURNING *", (student_id,))
+    student = cur.fetchone()
     conn.commit()
     logging.info(f"Deleted student with ID: {student_id}")
+    return student
 
 def delete_discipline(discipline_id, cur, conn):
-    cur.execute("DELETE FROM disciplines WHERE id = %s", (discipline_id,))
+    cur.execute("DELETE FROM disciplines WHERE id = %s RETURNING *", (discipline_id,))
+    discipline = cur.fetchone()
     conn.commit()
     logging.info(f"Deleted discipline with ID: {discipline_id}")
+    return discipline
 
-# Пример использования функций:
-cursor, conn = connect()
+#  Пример использования функций:
+# cursor, conn = connect()
 
-# Создание таблиц
-create_tables(cursor, conn)
+#  Создание таблиц
+# create_tables(cursor, conn)
 
-# Вызов команд API
-get_student(1, cursor)
+#  Вызов команд API
+# get_student(1, cursor)
 # get_discipline(2, cursor)
 # get_students_by_course(3, cursor)
 # get_all_disciplines(cursor)
