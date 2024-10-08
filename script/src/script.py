@@ -14,8 +14,8 @@ def connect():
 		logging.info("Connection with DB established successfully")
 		cur = conn.cursor()
 		return (cur, conn)
-	except:
-		logging.error("Error while connecting to DB")
+	except Exception as e:
+		logging.error("Error while connecting to DB : %s", e)
 
 # API функции
 def get_student(student_id, cur):

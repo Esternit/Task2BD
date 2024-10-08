@@ -3,8 +3,15 @@ import script as s
 from pydantic import BaseModel
 
 app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})
-cursor, conn = s.connect()
+import time
 
+for i in range(10):
+    try:
+        cursor, conn = s.connect()
+        break
+    except Exception as e:
+        print(f"Error connecting to DB: {e}. Sleeping for 5 seconds and trying again.")
+        time.sleep(5)
 
 
 class Student(BaseModel):
