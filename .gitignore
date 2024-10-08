@@ -2,3 +2,4 @@ env/
 database/
 pgadmin-data/
 script/src/__pycache__/
+*.txt
